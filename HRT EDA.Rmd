@@ -1,0 +1,386 @@
+---
+title: "HRT EDA"
+author: "Xu Luo"
+date: "2022-12-17"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(knitr)
+library(shiny)
+library(shinythemes)
+library(readr)
+```
+
+#Read data
+In this EDA report, I download the MBTA Travel Times data. However, due to the size of data set(around 3.3Gb), I only randomly pick a week from each months from Nov.2021 - Oct.2022 for HRT data. I didn't included LRT and Bus Data since I think this data is enough for the main part of the project.
+
+For the data cleaning process, I wrote functions to randomly select week from the original data set, and I output a selected data set call"HRT_year". I put the code in into another rmd file, because of the large data size .
+```{r include=FALSE}
+HRT_year <- read.csv("HRT_Data.csv", header = TRUE)
+```
+
+#EDA
+In this HRT_year data, I subset 3 data set from Orange, Blue and Red Line, and assign each row a corresponding weekdays and months name
+```{r include=FALSE}
+# Filter out the orange line 
+Orange_Line <- HRT_year %>% filter (route_id == "Orange")
+Blue_Line <- HRT_year %>% filter (route_id == "Blue")
+Red_Line <- HRT_year %>% filter (route_id == "Red")
+
+
+Orange_Line <- Orange_Line %>% mutate(traits = paste(from_stop_id, to_stop_id, sep = "~"))
+Blue_Line <- Blue_Line %>% mutate(traits = paste(from_stop_id, to_stop_id, sep = "~"))
+Red_Line <- Red_Line %>% mutate(traits = paste(from_stop_id, to_stop_id, sep = "~"))
+
+
+Orange_Line$service_date <- as.Date(Orange_Line$service_date, format = "%Y-%m-%d")
+Blue_Line$service_date <- as.Date(Blue_Line$service_date, format = "%Y-%m-%d")
+Red_Line$service_date <- as.Date(Red_Line$service_date, format = "%Y-%m-%d")
+
+```
+
+```{r include=FALSE}
+#assign weekday name
+Sys.setlocale("LC_TIME", "English")
+Orange_Line <- Orange_Line %>% mutate(wk_name = weekdays(service_date))
+Blue_Line <- Blue_Line %>% mutate(wk_name = weekdays(service_date))
+Red_Line <- Red_Line %>% mutate(wk_name = weekdays(service_date))
+
+#assign month name
+Orange_Line <- Orange_Line %>% mutate(months_name = month(service_date))
+Blue_Line <- Blue_Line %>% mutate(months_name = month(service_date))
+Red_Line <- Red_Line %>% mutate(months_name = month(service_date))
+```
+
+## Plot1 average travel time of Orange, Blue, Red Line
+In this plot, we can know that the red line has longest average travel time among all 3 lines
+```{r echo=False}
+org_time <- Orange_Line %>% 
+  summarise(all_time = round((mean(travel_time_sec))))
+routes <- c("Orange Line")
+org_time <- org_time %>% mutate(Route = routes)
+
+blue_time <- Blue_Line %>% 
+  summarise(all_time = round((mean(travel_time_sec))))
+routes <- c("Blue Line")
+blue_time <- blue_time %>% mutate(Route = routes)
+
+red_time <- Red_Line %>% 
+  summarise(all_time = round((mean(travel_time_sec))))
+routes <- c("Red Line")
+red_time <- red_time %>% mutate(Route = routes)
+
+avg_all <- rbind(org_time,blue_time, red_time)
+
+
+ggplot(avg_all, aes(x=all_time, y=Route))+
+  geom_col(fill= "dark green")+
+  geom_text(aes(label=all_time), position = position_dodge(width = 0.9), vjust=0.15)+
+  labs(title = "Average Travel Times of Different Lines", x = "Average Travel Times", y = "Routes")
+
+```
+
+
+## Plot 2： Average Travel time of Orange, Blue, and Red Line on different weekdays:
+In this plot, I compared the average travel time of 3 lines on different weekdays. The Average time will be shorten in Red Line during the weekend, while other lines remain the same.
+```{r echo=False}
+#calculate means by weekdays
+org_avg_time <- Orange_Line %>% group_by(wk_name)  %>% 
+  summarise(AVG_time = round((mean(travel_time_sec))))
+
+
+blue_avg_time <- Blue_Line %>% group_by(wk_name)  %>% 
+  summarise(AVG_time = round((mean(travel_time_sec))))
+
+red_avg_time <- Red_Line %>% group_by(wk_name)  %>% 
+  summarise(AVG_time = round((mean(travel_time_sec))))
+
+avg_time1 <- org_avg_time %>% left_join(blue_avg_time, by = "wk_name")
+avg_time <- avg_time1 %>% left_join(red_avg_time, by = "wk_name")
+Avg_time_1 <- avg_time %>%
+  select(wk_name, AVG_time.x, AVG_time.y, AVG_time ) %>%
+  rename(OrangeLine = AVG_time.x) %>%
+  rename(BlueLine = AVG_time.y) %>%
+  rename(RedLine = AVG_time) %>%
+  rename(wkdays = wk_name) %>%
+  arrange(wkdays)
+```
+
+```{r echo=False}
+Avg_time2 <- Avg_time_1 %>%
+  pivot_longer(
+    cols = OrangeLine:RedLine,
+    names_to = "Routes",
+    values_to = "avg_travel_times"
+  )
+
+
+avg_trip_time <- ggplot(Avg_time2, aes(fill=Routes, y=avg_travel_times, x=wkdays)) + 
+    geom_bar(position="dodge", stat="identity")+
+  scale_fill_manual(values=c("darkblue",
+                             "orange",
+                             "dark red"
+                             ))+
+  geom_text(aes(label=avg_travel_times), position = position_dodge(width = 0.9), vjust=-0.15)+
+  labs(title = "Average Travel Times on Weekdays", x = "Weekdays", y = "Average Travel Times")
+avg_trip_time
+
+
+```
+## Plot 3: Boxplot and barchart of avg travel time in each month of Orange Line
+
+In the following plots, I compare the avg travel time in each month of each line. The travel time is stable in whole year. There is a lack of data in Orange Line since Orange Line Broke down on August.2022
+```{r echo=FALSE}
+# wipe out the outliers
+box_org <- Orange_Line %>% filter (travel_time_sec <= 7000)
+# boxplot
+boxplot(travel_time_sec ~ months_name, box_org)
+
+
+# bar chart
+org_avg_time <- Orange_Line %>% group_by(months_name)  %>% 
+  summarise(AVG_time3 = round((mean(travel_time_sec))))
+sd_avg <- Orange_Line %>% group_by(months_name)  %>% 
+  summarise(sdavg = sd(travel_time_sec))
+
+ggplot(org_avg_time, aes(y=AVG_time3, x=months_name)) + 
+  geom_bar(position="dodge", stat="identity", fill = "skyblue") +
+  geom_errorbar( aes(x=months_name, ymin=AVG_time3-sd_avg$sdavg, ymax=AVG_time3+sd_avg$sdavg), 
+                 width=0.2, color="black", alpha=1.0, size=0.5)+
+  geom_text(aes(label=AVG_time3), position = position_dodge(width = 0.9), color = "blue", vjust=-0.15)+
+  labs(title = "Average Travel Times in different months: Orange Line", x = "Months", y = "Average Travel Times")+
+  scale_x_continuous(limits=c(0, 12.5), breaks=seq(1, 13, 1))
+  
+#The error bars show the standard deviation of the average travel times
+# Data in Aug. 2022 was missing since Orange Line Broke down on August.
+```
+
+## Plot 3b Boxplot and barchart of avg travel time in each month of Blue Line
+
+```{r echo=FALSE}
+# wipe out the outliers
+box_blue <- Blue_Line %>% filter (travel_time_sec <= 2000)
+# boxplot
+boxplot(travel_time_sec ~ months_name, box_blue)
+
+
+# bar chart
+blu_avg_time <- Blue_Line %>% group_by(months_name)  %>% 
+  summarise(AVG_time3b = round((mean(travel_time_sec))))
+sd_avg <- Blue_Line %>% group_by(months_name)  %>% 
+  summarise(sdavg = sd(travel_time_sec))
+
+ggplot(blu_avg_time, aes(y=AVG_time3b, x=months_name)) + 
+  geom_bar(position="dodge", stat="identity", fill = "skyblue") +
+  geom_errorbar( aes(x=months_name, ymin=AVG_time3b-sd_avg$sdavg, ymax=AVG_time3b+sd_avg$sdavg), 
+                 width=0.2, color="black", alpha=1.0, size=0.5)+
+  geom_text(aes(label=AVG_time3b), position = position_dodge(width = 0.9), color = "blue", vjust=-0.15)+
+  labs(title = "Average Travel Times in different months: Blue Line", x = "Months", y = "Average Travel Times")+
+  scale_x_continuous(limits=c(0, 12.5), breaks=seq(1, 13, 1))
+```
+## Plot 3b Boxplot and barchart of avg travel time in each month of Blue Line
+```{r echo=FALSE}
+# wipe out the outliers
+box_red <- Red_Line %>% filter (travel_time_sec <= 5000)
+# boxplot
+boxplot(travel_time_sec ~ months_name, box_red)
+
+
+# bar chart
+red_avg_time <- Red_Line %>% group_by(months_name)  %>% 
+  summarise(AVG_time3c = round((mean(travel_time_sec))))
+sd_avg <- Red_Line %>% group_by(months_name)  %>% 
+  summarise(sdavg = sd(travel_time_sec))
+
+ggplot(red_avg_time, aes(y=AVG_time3c, x=months_name)) + 
+  geom_bar(position="dodge", stat="identity", fill = "skyblue") +
+  geom_errorbar( aes(x=months_name, ymin=AVG_time3c-sd_avg$sdavg, ymax=AVG_time3c+sd_avg$sdavg), 
+                 width=0.2, color="black", alpha=1.0, size=0.5)+
+  geom_text(aes(label=AVG_time3c), position = position_dodge(width = 0.9), color = "blue", vjust=-0.15)+
+  labs(title = "Average Travel Times in different months: Red Line", x = "Months", y = "Average Travel Times")+
+  scale_x_continuous(limits=c(0, 12.5), breaks=seq(1, 13, 1))
+```
+
+
+## Plot 4: The average travel time of differnt traits
+```{r echo=FALSE}
+traits_time <- Orange_Line %>% group_by(from_stop_id)  %>% 
+  summarise(traits_avg = round((mean(travel_time_sec))))
+traits_time <- traits_time %>% mutate(traits_num = c(1: length(traits_avg)))
+
+ggplot(traits_time, aes(y=traits_avg, x=traits_num)) + 
+  geom_bar(position="dodge", stat="identity", fill = "skyblue")
+```
+
+# Whether the dircction could affect the travel times of Orange Line:
+In the following plot, I compare the avg travel time of different line by different directions. The Orange Line costs more time when coming in city center, while the RED Line costs more when outbound of the city. The Blue line costs the same time when coming in and out of the city:
+```{r echo=FALSE}
+# "0" means inbound to city center
+# "1" means outbound from center
+
+in_org <- Orange_Line%>% filter(direction_id == "0")
+out_org <- Orange_Line%>% filter(direction_id == "1")
+
+incity_all <- in_org %>% 
+  summarise(direction_avg = round((mean(travel_time_sec))))
+
+outcity_all <- out_org %>% 
+  summarise(direction_avg = round((mean(travel_time_sec))))
+
+Directions <- c("Inbound")
+incity_all <- incity_all %>% mutate(direction = Directions)
+
+Directions2 <- c("Outbound")
+outcity_all <- outcity_all %>% mutate(direction = Directions2)
+
+com_direct <- rbind(incity_all, outcity_all)
+kable(com_direct)
+# ggplot(com_direct, aes(x=direction, y=direction_avg))+
+#   geom_col(fill= "dark blue")+
+#   geom_text(aes(label=direction_avg), position = position_dodge(width = 0.9), vjust=0.15)+
+#   labs(title = "Average Travel Times of Different Direction", x = "Average Travel Times", y = "Rirection")
+
+# see difference on weekdays
+incity_time <- in_org %>% group_by(wk_name)  %>% 
+  summarise(incity_avg = round((mean(travel_time_sec))))
+
+outcity_time <- out_org %>% group_by(wk_name)  %>% 
+  summarise(outcity_avg = round((mean(travel_time_sec))))
+
+compare_time <- incity_time %>% left_join(outcity_time, by = "wk_name")
+
+#tidy the data
+Com_time <- compare_time %>%
+  pivot_longer(
+    cols = incity_avg:outcity_avg,
+    names_to = "Direction",
+    values_to = "avg_travel_times"
+  )
+
+ggplot(Com_time, aes(fill=Direction, y=avg_travel_times, x=wk_name)) + 
+    geom_bar(position="dodge", stat="identity")+
+  scale_fill_manual(values=c("sky blue",
+                             "light green"
+                             ))+
+  geom_text(aes(label=avg_travel_times), position = position_dodge(width = 0.9), vjust=-0.15)+
+  labs(title = "Average Travel Times on Weekdays on Orange Line", x = "Weekdays", y = "Average Travel Times")+
+  scale_y_continuous(limits=c(0, 1000))
+
+```
+# Whether the dircction could affect the travel times of Blue Line:
+```{r echo=FALSE}
+in_blue <- Blue_Line%>% filter(direction_id == "0")
+out_blue <- Blue_Line%>% filter(direction_id == "1")
+
+incity_all <- in_blue %>% 
+  summarise(direction_avg = round((mean(travel_time_sec))))
+
+outcity_all <- out_blue %>% 
+  summarise(direction_avg = round((mean(travel_time_sec))))
+
+Directions <- c("Inbound")
+incity_all <- incity_all %>% mutate(direction = Directions)
+
+Directions2 <- c("Outbound")
+outcity_all <- outcity_all %>% mutate(direction = Directions2)
+
+com_direct <- rbind(incity_all, outcity_all)
+kable(com_direct)
+
+
+# see difference on weekdays
+incity_time <- in_blue %>% group_by(wk_name)  %>% 
+  summarise(incity_avg = round((mean(travel_time_sec))))
+
+outcity_time <- out_blue %>% group_by(wk_name)  %>% 
+  summarise(outcity_avg = round((mean(travel_time_sec))))
+
+compare_time <- incity_time %>% left_join(outcity_time, by = "wk_name")
+kable(compare_time)
+# 
+# #tidy the data
+# Com_time <- compare_time %>%
+#   pivot_longer(
+#     cols = incity_avg:outcity_avg,
+#     names_to = "Direction",
+#     values_to = "avg_travel_times"
+#   )
+# 
+# ggplot(Com_time, aes(fill=Direction, y=avg_travel_times, x=wk_name)) + 
+#     geom_bar(position="dodge", stat="identity")+
+#   scale_fill_manual(values=c("sky blue",
+#                              "light green"
+#                              ))+
+#   geom_text(aes(label=avg_travel_times), position = position_dodge(width = 0.9), vjust=-0.15)+
+#   labs(title = "Average Travel Times on Weekdays", x = "Weekdays", y = "Average Travel Times")+
+#   scale_y_continuous(limits=c(0, 1000))
+
+```
+# Whether the dircction could affect the travel times of Blue Line:
+```{r echo=FALSE}
+in_red <- Red_Line%>% filter(direction_id == "0")
+out_red <- Red_Line%>% filter(direction_id == "1")
+
+incity_all <- in_red %>% 
+  summarise(direction_avg = round((mean(travel_time_sec))))
+
+outcity_all <- out_red %>% 
+  summarise(direction_avg = round((mean(travel_time_sec))))
+
+Directions <- c("Inbound")
+incity_all <- incity_all %>% mutate(direction = Directions)
+
+Directions2 <- c("Outbound")
+outcity_all <- outcity_all %>% mutate(direction = Directions2)
+
+com_direct <- rbind(incity_all, outcity_all)
+kable(com_direct)
+
+
+# see difference on weekdays
+incity_time <- in_red %>% group_by(wk_name)  %>% 
+  summarise(incity_avg = round((mean(travel_time_sec))))
+
+outcity_time <- out_red %>% group_by(wk_name)  %>% 
+  summarise(outcity_avg = round((mean(travel_time_sec))))
+
+compare_time <- incity_time %>% left_join(outcity_time, by = "wk_name")
+kable(compare_time)
+
+
+#tidy the data
+Com_time <- compare_time %>%
+  pivot_longer(
+    cols = incity_avg:outcity_avg,
+    names_to = "Direction",
+    values_to = "avg_travel_times"
+  )
+
+ggplot(Com_time, aes(fill=Direction, y=avg_travel_times, x=wk_name)) +
+    geom_bar(position="dodge", stat="identity")+
+  scale_fill_manual(values=c("sky blue",
+                             "light green"
+                             ))+
+  geom_text(aes(label=avg_travel_times), position = position_dodge(width = 0.9), vjust=-0.15)+
+  labs(title = "Average Travel Times on Weekdays on Red Line", x = "Weekdays", y = "Average Travel Times")+
+  scale_y_continuous(limits=c(0, 1200))
+```
+
+
+
+In the shiny app, since I didn't use leadlet as a method to create the map, I didn't achieve to create an interactive map. The size and the position of the map are also need to adjust. 
+
+Overall, I spent too much time on cleaning the large size data(which is almost undoable with my PC), and just left not enough time to create the shiny app.In the future study, I will be better in organizing my work and make a detailed schdule in advance.
+
