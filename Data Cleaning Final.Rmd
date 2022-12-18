@@ -1,0 +1,139 @@
+---
+title: "MA 615 Final Data Formation for HRT"
+author: "Xu Luo"
+date: "2022-12-16"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(tidyverse)
+
+```
+
+
+
+```{r include=FALSE}
+HRT_traveltimes21Q4 <- read.csv("HRTravelTimesQ4_21.csv", header = TRUE)
+HRT_traveltimesQ1 <- read.csv("2022-Q1_HRTravelTimes.csv", header = TRUE)
+HRT_traveltimesQ2 <- read.csv("2022-Q2_HRTravelTimes.csv", header = TRUE)
+HRT_traveltimesQ3 <- read.csv("2022-Q3_HRTravelTimes.csv", header = TRUE)
+
+```
+
+```{r include=FALSE}
+HRT_traveltimes21Q4$service_date <- as.Date(HRT_traveltimes21Q4$service_date, format = "%Y-%m-%d")
+HRT_traveltimesQ1$service_date <- as.Date(HRT_traveltimesQ1$service_date, format = "%Y-%m-%d")
+HRT_traveltimesQ2$service_date <- as.Date(HRT_traveltimesQ2$service_date, format = "%Y-%m-%d")
+HRT_traveltimesQ3$service_date <- as.Date(HRT_traveltimesQ3$service_date, format = "%Y-%m-%d")
+```
+
+
+```{r include=FALSE}
+Oct21_HRT <- HRT_traveltimes21Q4[grep("2021-10", HRT_traveltimes21Q4$`service_date`, ignore.case = T),]
+Nov21_HRT <- HRT_traveltimes21Q4[grep("2021-11", HRT_traveltimes21Q4$`service_date`, ignore.case = T),]
+Dec21_HRT <- HRT_traveltimes21Q4[grep("2021-12", HRT_traveltimes21Q4$`service_date`, ignore.case = T),]
+
+
+Jan22_HRT <- HRT_traveltimesQ1[grep("2022-01", HRT_traveltimesQ1$`service_date`, ignore.case = T),]
+Feb22_HRT <- HRT_traveltimesQ1[grep("2022-02", HRT_traveltimesQ1$`service_date`, ignore.case = T),]
+Mar22_HRT <- HRT_traveltimesQ1[grep("2022-03", HRT_traveltimesQ1$`service_date`, ignore.case = T),]
+
+Apr22_HRT <- HRT_traveltimesQ2[grep("2022-04", HRT_traveltimesQ2$`service_date`, ignore.case = T),]
+May22_HRT <- HRT_traveltimesQ2[grep("2022-05", HRT_traveltimesQ2$`service_date`, ignore.case = T),]
+Jun22_HRT <- HRT_traveltimesQ2[grep("2022-06", HRT_traveltimesQ2$`service_date`, ignore.case = T),]
+
+Jul22_HRT <- HRT_traveltimesQ3[grep("2022-07", HRT_traveltimesQ3$`service_date`, ignore.case = T),]
+Aug22_HRT <- HRT_traveltimesQ3[grep("2022-08", HRT_traveltimesQ3$`service_date`, ignore.case = T),]
+Sep22_HRT <- HRT_traveltimesQ3[grep("2022-09", HRT_traveltimesQ3$`service_date`, ignore.case = T),]
+```
+
+#Function that assign week numbers to each day:
+```{r}
+add_week <- function(Months){
+  mt <- tibble(Months)
+  mt <- mt %>% mutate(weeknum = week(service_date))
+  return(mt)
+}
+```
+
+#Function that randomly pick a week from each month:
+```{r}
+random_week <- function(Months){
+  mt <- tibble(Months)
+  
+  set.seed(123)
+  select_week <- sample(mt$weeknum, 1)
+  return(select_week)
+}
+```
+
+#Run Function to add week numbers
+```{r include=FALSE}
+Oct21_HRT <- add_week(Oct21_HRT)
+Nov21_HRT <- add_week(Nov21_HRT)
+Dec21_HRT <- add_week(Dec21_HRT)
+Jan22_HRT <- add_week(Jan22_HRT)
+Feb22_HRT <- add_week(Feb22_HRT)
+Mar22_HRT <- add_week(Mar22_HRT)
+Apr22_HRT <- add_week(Apr22_HRT)
+May22_HRT <- add_week(May22_HRT)
+Jun22_HRT <- add_week(Jun22_HRT)
+Jul22_HRT <- add_week(Jul22_HRT)
+Aug22_HRT <- add_week(Aug22_HRT)
+Sep22_HRT <- add_week(Sep22_HRT)
+
+```
+
+#Run random_week Function to select random week from each month 
+```{r include=FALSE}
+random_week(Oct21_HRT)
+random_week(Nov21_HRT)
+random_week(Dec21_HRT)
+random_week(Jan22_HRT)
+random_week(Feb22_HRT)
+random_week(Mar22_HRT)
+random_week(Apr22_HRT)
+random_week(May22_HRT)
+random_week(Jun22_HRT)
+random_week(Jul22_HRT)
+random_week(Aug22_HRT)
+random_week(Sep22_HRT)
+```
+
+#Filter out the data of selected week
+```{r include=FALSE}
+Oct21_HRT <- Oct21_HRT %>% filter(weeknum == "42")
+Nov21_HRT <- Nov21_HRT %>% filter(weeknum == "46")
+Dec21_HRT <- Dec21_HRT %>% filter(weeknum == "51")
+Jan22_HRT <- Jan22_HRT %>% filter(weeknum == "3")
+Feb22_HRT <- Feb22_HRT %>% filter(weeknum == "7")
+Mar22_HRT <- Mar22_HRT %>% filter(weeknum == "11")
+Apr22_HRT <- Apr22_HRT %>% filter(weeknum == "16")
+May22_HRT <- May22_HRT %>% filter(weeknum == "20")
+Jun22_HRT <- Jun22_HRT %>% filter(weeknum == "25")
+Jul22_HRT <- Jul22_HRT %>% filter(weeknum == "30")
+Aug22_HRT <- Aug22_HRT %>% filter(weeknum == "34")
+Sep22_HRT <- Sep22_HRT %>% filter(weeknum == "39")
+```
+
+#Join all selected HRT data and Form a new data set of HRT
+```{r include=FALSE}
+HRT_year <- rbind(Oct21_HRT, Nov21_HRT, Dec21_HRT, Jan22_HRT, Feb22_HRT, Mar22_HRT, Apr22_HRT, May22_HRT, Jun22_HRT, Jul22_HRT, Aug22_HRT, Sep22_HRT  )
+
+write.csv(x = HRT_year, file = "HRT_Data.csv")
+```
+
+
+
+
+
+
+
